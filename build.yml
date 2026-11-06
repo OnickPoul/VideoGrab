@@ -1,0 +1,43 @@
+name: Сборка VideoGrab.exe
+
+on:
+  workflow_dispatch:        # кнопка «Run workflow» вручную
+  push:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Установка зависимостей (всегда свежий yt-dlp)
+        shell: pwsh
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Сборка
+        shell: pwsh
+        run: |
+          $deno = python -c "import deno; print(deno.find_deno_bin())"
+          Write-Host "deno: $deno"
+          pyinstaller --noconfirm --clean --windowed --name VideoGrab `
+            --collect-all customtkinter --collect-all imageio_ffmpeg --collect-all yt_dlp_ejs `
+            --add-binary "${deno};." app.py
+
+      - name: Самопроверка (ffmpeg и JS-рантайм внутри сборки)
+        shell: pwsh
+        run: |
+          $p = Start-Process "dist\VideoGrab\VideoGrab.exe" -ArgumentList "--selftest","selftest.json" -Wait -PassThru
+          Get-Content selftest.json
+          if ($p.ExitCode -ne 0) { throw "Самопроверка не пройдена" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VideoGrab-windows
+          path: dist/VideoGrab
